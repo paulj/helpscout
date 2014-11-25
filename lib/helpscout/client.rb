@@ -33,14 +33,10 @@
 # API Key to new:
 # HelpScout::Client.new(XXXXXX)
 
-require "erb"
-require "httparty"
-require "yaml"
+require "helpscout/base_client"
 
 module HelpScout
-  class Client
-    include HTTParty
-
+  class Client < BaseClient
     # All API requests will be made to: https://api.helpscout.net/. All 
     # requests are served over HTTPS. The current version is v1.
     base_uri 'https://api.helpscout.net/v1'
@@ -67,193 +63,6 @@ module HelpScout
       @@settings
     end
 
-
-    # Requests a single item from the Help Scout API. Should return either an 
-    # item from the SingleItemEnvelope, or raise an error with an 
-    # ErrorEnvelope.
-    #
-    # url     String  A string representing the url for the REST endpoint to be
-    #                 queried.
-    # params  Hash    A hash of GET parameters to use for this particular 
-    #                 request.
-    #
-    # Response
-    #           Name    Type   Notes     
-    #  Header   Status  Int    200
-    #  Body     item
-
-    def self.request_item(auth, url, params = {})
-      item = nil
-
-      request_url = ""
-      request_url << url
-      if params
-        query = ""
-        params.each { |k,v| query += "#{k}=#{v}&" }
-        request_url << "?" + query
-      end
-
-      begin
-        response = Client.get(request_url, {:basic_auth => auth})
-      rescue SocketError => se
-        raise StandardError, se.message
-      end
-
-      if 200 <= response.code && response.code < 300
-        envelope = SingleItemEnvelope.new(response)
-        if envelope.item
-          item = envelope.item
-        end
-      elsif 400 <= response.code && response.code < 500
-        if response["message"]
-          envelope = ErrorEnvelope.new(response)
-          raise StandardError, envelope.message
-        else
-          raise StandardError, response["error"]
-        end
-      else
-        raise StandardError, "Server Response: #{response.code}"
-      end
-
-      item
-    end
-
-
-    # Requests a collections of items from the Help Scout API. Should return 
-    # either an array of items from the CollectionsEnvelope, or raise an error 
-    # with an ErrorEnvelope.
-    # 
-    # Collections return a maximum of 50 records per page.
-    #
-    # url     String  A string representing the url for the REST endpoint to be 
-    #                 queried.
-    # params  Hash    A hash of GET parameters to use for this particular 
-    #                 request.
-    #
-    # Response
-    #           Name    Type   Notes     
-    #  Header   Status  Int    200
-    #  Body     page    Int    Current page that was passed in on the request
-    #           pages   Int    Total number of pages available
-    #           count   Int    Total number of objects available
-    #           items   Array  Collection of objects
-
-    def self.request_items(auth, url, params = {})
-      items = []
-
-      request_url = ""
-      request_url << url
-      if params
-        query = ""
-        params.each { |k,v| query += "#{k}=#{v}&" }
-        request_url << "?" + query
-      end
-
-      begin
-        response = Client.get(request_url, {:basic_auth => auth})
-      rescue SocketError => se
-        raise StandardError, se.message
-      end
-    
-      if 200 <= response.code && response.code < 300
-        envelope = CollectionsEnvelope.new(response)
-        if envelope.items
-          envelope.items.each do |item|
-            items << item
-          end
-        end
-      elsif 400 <= response.code && response.code < 500
-        if response["message"]
-          envelope = ErrorEnvelope.new(response)
-          raise StandardError, envelope.message
-        else
-          raise StandardError, response["error"]
-        end
-      else
-        raise StandardError, "Server Response: #{response.code}"
-      end
-
-      items
-    end
-    
-
-    # Requests a collections of items from the Help Scout API. Should return 
-    # the total count for this collection, or raise an error with an 
-    # ErrorEnvelope.
-    # 
-    # url     String  A string representing the url for the REST endpoint to be 
-    #                 queried.
-    # params  Hash    A hash of GET parameters to use for this particular 
-    #                 request.
-    #
-    # Response
-    #           Name    Type   Notes
-    #  Header   Status  Int    200
-    #  Body     page    Int    Current page that was passed in on the request
-    #           pages   Int    Total number of pages available
-    #           count   Int    Total number of objects available
-    #           items   Array  Collection of objects
-
-    def self.request_count(auth, url, params = {})
-      request_url = ""
-      request_url << url
-      if params
-        query = ""
-        params.each { |k,v| query += "#{k}=#{v}&" }
-        request_url << "?" + query
-      end
-
-      begin
-        response = Client.get(request_url, {:basic_auth => auth})
-      rescue SocketError => se
-        raise StandardError, se.message
-      end
-    
-      if 200 <= response.code && response.code < 300
-        envelope = CollectionsEnvelope.new(response)
-        envelope.count
-      elsif 400 <= response.code && response.code < 500
-        if response["message"]
-          envelope = ErrorEnvelope.new(response)
-          raise StandardError, envelope.message
-        else
-          raise StandardError, response["error"]
-        end
-      else
-        raise StandardError, "Server Response: #{response.code}"
-      end     
-    end
-
-
-    # Sends a POST request to create a single item from the Help Scout API.
-    #
-    # url     String  A string representing the url to POST.
-    # params  Hash    A hash of POST parameters to use for this particular 
-    #                 request.
-    #
-    # Response
-    #  Name      Type    Notes
-    #  Location  String  https://api.helpscout.net/v1/conversations/{id}.json
-
-    def self.create_item(auth, url, params = {})
-      begin
-        response = Client.post(url, {:basic_auth => auth, :headers => { 'Content-Type' => 'application/json' }, :body => params })
-      rescue SocketError => se
-        raise StandardError, se.message
-      end
-
-      if response.code == 201
-        if response["item"]
-          response["item"]
-        else
-          response["Location"]
-        end
-      else
-        raise StandardError.new("Server Response: #{response.code} #{response.message}")
-      end
-    end
-
-
     # HelpScout::Client.new
     # 
     # Initializes the Help Scout Client. Once called, you may use any of the 
@@ -263,17 +72,8 @@ module HelpScout
     #              loaded from @@settings, which defaults to helpscout.yml.
 
     def initialize(key=nil)
-      Client.settings
-  
-      if key.nil?
-        key = @@settings["api_key"]
-      end
-
-      # The Help Scout API uses Basic Auth, where username is your API Key. 
-      # Password can be any arbitrary non-zero-length string.
-      @auth = { :username => key, :password => "X" }
+      super
     end
-
 
     # Get User
     # http://developer.helpscout.net/users/
@@ -512,12 +312,27 @@ module HelpScout
 
       url = "/conversations.json"
 
-      begin
+      # begin
         response = Client.create_item(@auth, url, conversation.to_json)
-      rescue StandardError => e
-        puts "Could not create conversation: #{e.message}"
-      end
+      # rescue StandardError => e
+        # puts "Could not create conversation: #{e.message}"
+      # end
     end
+
+    def create_thread(conversation, thread)
+      if !thread
+        raise StandardError.new("Missing Conversation")
+      end
+
+      url = "/conversations/#{thread}.json"
+
+      # begin
+        response = Client.create_item(@auth, url, thread.to_json)
+      # rescue StandardError => e
+        # puts "Could not create conversation: #{e.message}"
+      # end
+    end
+
 
 
     # List Conversations

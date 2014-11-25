@@ -1,0 +1,17 @@
+module HelpScout
+  <% objects.each do |object| %>
+    class <%= object.name %>
+      attr_reader <%= object.fields.map { |f| ":#{f.name}" }.join(', ') %>
+
+      def initialize(object)
+        <% object.fields.each do |f| %>
+          @<%= f.name %> = <% if f.type == 'DateTime' %>
+            DateTime.iso8601(object['<%= f.name %>']) if object['<%= f.name %>']
+          <% else %>
+            object['<%= f.name %>']
+          <% end %>
+        <% end %>
+      end
+    end
+  <% end %>
+end
